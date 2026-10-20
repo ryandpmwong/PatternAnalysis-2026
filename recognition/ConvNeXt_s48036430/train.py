@@ -6,7 +6,7 @@ import torch.nn as nn
 from matplotlib import pyplot as plt
 from torchvision import transforms
 
-from dataset import BATCH_SIZE, CLASS_TO_LABEL, load_train_validation
+from dataset import BATCH_SIZE, CLASS_TO_LABEL, load_dataset, load_train_validation
 from modules import ConvNeXtClassifier
 
 EPOCHS = 300
@@ -149,6 +149,7 @@ def print_class_counts(name, data_loader):
 
 def main():
     train_loader, validation_loader = load_train_validation(batch_size=BATCH_SIZE)
+    test_loader = load_dataset("test", batch_size=BATCH_SIZE)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ConvNeXtClassifier().to(device)
     loss_function = nn.CrossEntropyLoss()
@@ -281,6 +282,17 @@ def main():
             f"learning rate: {current_learning_rate:.2e}"
         )
         scheduler.step()
+
+    test_loss, test_accuracy, test_ad_recall, test_false_negative_rate = evaluate_model(
+        model, test_loader, loss_function, device
+    )
+    print(
+        f"Test results | "
+        f"loss: {test_loss:.4f} | "
+        f"accuracy: {test_accuracy:.2%} | "
+        f"AD recall: {test_ad_recall:.2%} | "
+        f"AD false-negative rate: {test_false_negative_rate:.2%}"
+    )
 
     plot_directory = Path("./plots")
     plot_directory.mkdir(parents=True, exist_ok=True)
