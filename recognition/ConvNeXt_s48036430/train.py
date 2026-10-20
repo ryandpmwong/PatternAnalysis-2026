@@ -1,5 +1,6 @@
 from collections import Counter
 from pathlib import Path
+from time import perf_counter
 
 import torch
 import torch.nn as nn
@@ -200,6 +201,7 @@ def main():
     axes.flat[5].set_visible(False)
 
     for epoch in range(1, EPOCHS + 1):
+        epoch_start_time = perf_counter()
         current_learning_rate = optimizer.param_groups[0]["lr"]
         epoch_loss, epoch_accuracy = train_model(model, train_loader, optimizer, device)
         (
@@ -208,6 +210,7 @@ def main():
             ad_recall,
             false_negative_rate,
         ) = evaluate_model(model, validation_loader, loss_function, device)
+        epoch_duration = perf_counter() - epoch_start_time
 
         # Use validation accuracy to select the test-accuracy candidate; then prefer AD recall.
         validation_score = (validation_accuracy, ad_recall, -validation_loss)
@@ -300,7 +303,8 @@ def main():
             f"validation accuracy: {validation_accuracy:.2%} | "
             f"AD recall: {ad_recall:.2%} | "
             f"AD false-negative rate: {false_negative_rate:.2%} | "
-            f"learning rate: {current_learning_rate:.2e}"
+            f"learning rate: {current_learning_rate:.2e} | "
+            f"time: {epoch_duration:.2f}s"
         )
         scheduler.step()
 
