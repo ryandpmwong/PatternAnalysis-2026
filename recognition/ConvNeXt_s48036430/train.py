@@ -21,7 +21,9 @@ CUTMIX_ALPHA = 1.0
 
 TRAIN_AUGMENTATION = transforms.Compose(
     [
+        transforms.ConvertImageDtype(torch.uint8),
         transforms.RandAugment(num_ops=2, magnitude=9),
+        transforms.ConvertImageDtype(torch.float32),
         transforms.RandomErasing(p=0.25),
     ]
 )
