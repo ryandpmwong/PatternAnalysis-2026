@@ -176,6 +176,7 @@ def main():
     print_class_counts("Validation", validation_loader)
 
     epochs = []
+    learning_rates = []
     train_losses = []
     validation_losses = []
     train_accuracies = []
@@ -184,8 +185,15 @@ def main():
     false_negative_rates = []
 
     plt.ion()
-    figure, axes = plt.subplots(2, 2, figsize=(12, 8))
-    loss_axis, accuracy_axis, recall_axis, false_negative_axis = axes.flat
+    figure, axes = plt.subplots(3, 2, figsize=(12, 12))
+    (
+        loss_axis,
+        accuracy_axis,
+        recall_axis,
+        false_negative_axis,
+        learning_rate_axis,
+    ) = axes.flat[:5]
+    axes.flat[5].set_visible(False)
 
     for epoch in range(1, EPOCHS + 1):
         current_learning_rate = optimizer.param_groups[0]["lr"]
@@ -198,6 +206,7 @@ def main():
         ) = evaluate_model(model, validation_loader, loss_function, device)
 
         epochs.append(epoch)
+        learning_rates.append(current_learning_rate)
         train_losses.append(epoch_loss)
         validation_losses.append(validation_loss)
         train_accuracies.append(epoch_accuracy)
@@ -248,6 +257,14 @@ def main():
             ylim=(0, 1),
         )
         false_negative_axis.grid(True, alpha=0.3)
+
+        # Plot the warmup and cosine learning-rate schedule.
+        learning_rate_axis.clear()
+        learning_rate_axis.plot(epochs, learning_rates, marker="o", color="tab:purple")
+        learning_rate_axis.set(
+            title="Learning Rate", xlabel="Epoch", ylabel="Learning rate"
+        )
+        learning_rate_axis.grid(True, alpha=0.3)
 
         figure.tight_layout()
         figure.canvas.draw_idle()
