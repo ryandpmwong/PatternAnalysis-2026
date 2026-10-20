@@ -3,6 +3,8 @@ import torch.nn as nn
 
 
 class DropPath(nn.Module):
+    """Randomly drops residual branches during training for regularization."""
+
     def __init__(self, drop_prob=0.0):
         super().__init__()
         if not 0.0 <= drop_prob < 1.0:
@@ -20,6 +22,8 @@ class DropPath(nn.Module):
 
 
 class ConvNeXtBlock(nn.Module):
+    """Applies ConvNeXt feature processing with a residual connection."""
+
     def __init__(self, dim, layer_scale_init_value=1e-6, drop_path_rate=0.0):
         super().__init__()
         self.depthwise_conv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)
@@ -44,6 +48,8 @@ class ConvNeXtBlock(nn.Module):
 
 
 class LayerNorm2d(nn.Module):
+    """Applies channel-wise LayerNorm to a channels-first 2D feature map."""
+
     def __init__(self, dim, eps=1e-6):
         super().__init__()
         self.norm = nn.LayerNorm(dim, eps=eps)
@@ -55,6 +61,8 @@ class LayerNorm2d(nn.Module):
 
 
 class ConvNeXtClassifier(nn.Module):
+    """Builds a four-stage ConvNeXt model that outputs class logits."""
+
     def __init__(
         self,
         in_channels=1,
