@@ -184,6 +184,9 @@ def main():
     validation_accuracies = []
     ad_recalls = []
     false_negative_rates = []
+    checkpoint_path = Path("./models/convnext_best.pth")
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    best_validation_score = None
 
     plt.ion()
     figure, axes = plt.subplots(3, 2, figsize=(12, 12))
@@ -205,6 +208,24 @@ def main():
             ad_recall,
             false_negative_rate,
         ) = evaluate_model(model, validation_loader, loss_function, device)
+
+        # Use validation accuracy to select the test-accuracy candidate; then prefer AD recall.
+        validation_score = (validation_accuracy, ad_recall, -validation_loss)
+        if best_validation_score is None or validation_score > best_validation_score:
+            best_validation_score = validation_score
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "class_to_label": CLASS_TO_LABEL,
+                    "validation_loss": validation_loss,
+                    "validation_accuracy": validation_accuracy,
+                    "validation_ad_recall": ad_recall,
+                    "validation_ad_false_negative_rate": false_negative_rate,
+                },
+                checkpoint_path,
+            )
+            print(f"Saved best model parameters to {checkpoint_path}")
 
         epochs.append(epoch)
         learning_rates.append(current_learning_rate)
@@ -283,6 +304,9 @@ def main():
         )
         scheduler.step()
 
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    print(f"Testing best model from epoch {checkpoint['epoch']}.")
     test_loss, test_accuracy, test_ad_recall, test_false_negative_rate = evaluate_model(
         model, test_loader, loss_function, device
     )
