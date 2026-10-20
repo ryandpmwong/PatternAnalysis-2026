@@ -4,6 +4,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
+from torchvision import transforms
 
 from dataset import BATCH_SIZE, CLASS_TO_LABEL, load_train_validation
 from modules import ConvNeXtClassifier
@@ -13,6 +14,13 @@ LEARNING_RATE = 1e-4
 LABEL_SMOOTHING = 0.1
 MIXUP_ALPHA = 0.8
 CUTMIX_ALPHA = 1.0
+
+TRAIN_AUGMENTATION = transforms.Compose(
+    [
+        transforms.RandAugment(num_ops=2, magnitude=9),
+        transforms.RandomErasing(p=0.25),
+    ]
+)
 
 
 def mix_batch(images, labels, num_classes):
@@ -68,19 +76,25 @@ def mix_batch(images, labels, num_classes):
     return mixed_images, mixed_targets
 
 
-def train_model(model, train_loader, loss_function, optimizer, device):
+def soft_target_cross_entropy(logits, targets):
+    return -(targets * nn.functional.log_softmax(logits, dim=1)).sum(dim=1).mean()
+
+
+def train_model(model, train_loader, optimizer, device):
     model.train()
     total_loss = 0.0
     correct = 0
     total = 0
 
     for images, labels in train_loader:
+        images = torch.stack([TRAIN_AUGMENTATION(image) for image in images])
         images = images.to(device)
         labels = labels.to(device)
+        mixed_images, mixed_targets = mix_batch(images, labels, model.head.out_features)
 
         optimizer.zero_grad()
-        logits = model(images)
-        loss = loss_function(logits, labels)
+        logits = model(mixed_images)
+        loss = soft_target_cross_entropy(logits, mixed_targets)
         loss.backward()
         optimizer.step()
 
@@ -158,9 +172,7 @@ def main():
     loss_axis, accuracy_axis, recall_axis, false_negative_axis = axes.flat
 
     for epoch in range(1, EPOCHS + 1):
-        epoch_loss, epoch_accuracy = train_model(
-            model, train_loader, loss_function, optimizer, device
-        )
+        epoch_loss, epoch_accuracy = train_model(model, train_loader, optimizer, device)
         (
             validation_loss,
             validation_accuracy,
