@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from PIL import Image
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, random_split
 
 IMAGE_WIDTH = 256
 IMAGE_HEIGHT = 240
@@ -48,3 +48,32 @@ def load_dataset(split, batch_size=BATCH_SIZE, data_dir=DATA_DIR):
         split, image_size=(IMAGE_WIDTH, IMAGE_HEIGHT), data_dir=data_dir
     )
     return DataLoader(dataset, batch_size=batch_size, shuffle=(split == "train"))
+
+
+def load_train_validation(
+    batch_size=BATCH_SIZE,
+    validation_fraction=0.2,
+    data_dir=DATA_DIR,
+    seed=42,
+):
+    if not 0.0 < validation_fraction < 1.0:
+        raise ValueError("validation_fraction must be between 0 and 1")
+
+    dataset = BrainSliceDataset("train", data_dir=data_dir)
+    if len(dataset) < 2:
+        raise ValueError(
+            "At least two training images are required to split the dataset"
+        )
+
+    validation_size = round(len(dataset) * validation_fraction)
+    validation_size = max(1, min(validation_size, len(dataset) - 1))
+    train_size = len(dataset) - validation_size
+    train_set, validation_set = random_split(
+        dataset,
+        [train_size, validation_size],
+        generator=torch.Generator().manual_seed(seed),
+    )
+
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    validation_loader = DataLoader(validation_set, batch_size=batch_size, shuffle=False)
+    return train_loader, validation_loader
