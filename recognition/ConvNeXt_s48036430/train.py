@@ -186,21 +186,18 @@ def main():
     train_accuracies = []
     validation_accuracies = []
     ad_recalls = []
-    false_negative_rates = []
     checkpoint_path = Path("./models/convnext_best.pth")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     best_validation_score = None
 
     plt.ion()
-    figure, axes = plt.subplots(3, 2, figsize=(12, 12))
+    figure, axes = plt.subplots(2, 2, figsize=(12, 8))
     (
         loss_axis,
         accuracy_axis,
         recall_axis,
-        false_negative_axis,
         learning_rate_axis,
-    ) = axes.flat[:5]
-    axes.flat[5].set_visible(False)
+    ) = axes.flat
 
     for epoch in range(1, EPOCHS + 1):
         epoch_start_time = perf_counter()
@@ -239,7 +236,6 @@ def main():
         train_accuracies.append(epoch_accuracy)
         validation_accuracies.append(validation_accuracy)
         ad_recalls.append(ad_recall)
-        false_negative_rates.append(false_negative_rate)
 
         # Plot training and validation loss.
         loss_axis.clear()
@@ -272,19 +268,6 @@ def main():
         )
         recall_axis.grid(True, alpha=0.3)
 
-        # Plot validation false-negative rate for the AD class.
-        false_negative_axis.clear()
-        false_negative_axis.plot(
-            epochs, false_negative_rates, marker="o", color="tab:red"
-        )
-        false_negative_axis.set(
-            title="Validation AD False-Negative Rate",
-            xlabel="Epoch",
-            ylabel="False-negative rate",
-            ylim=(0, 1),
-        )
-        false_negative_axis.grid(True, alpha=0.3)
-
         # Plot the warmup and cosine learning-rate schedule.
         learning_rate_axis.clear()
         learning_rate_axis.plot(epochs, learning_rates, marker="o", color="tab:purple")
@@ -304,7 +287,6 @@ def main():
             f"validation loss: {validation_loss:.4f} | "
             f"validation accuracy: {validation_accuracy:.2%} | "
             f"AD recall: {ad_recall:.2%} | "
-            f"AD false-negative rate: {false_negative_rate:.2%} | "
             f"learning rate: {current_learning_rate:.2e} | "
             f"time: {epoch_duration:.2f}s"
         )
@@ -313,15 +295,14 @@ def main():
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     print(f"Testing best model from epoch {checkpoint['epoch']}.")
-    test_loss, test_accuracy, test_ad_recall, test_false_negative_rate = evaluate_model(
+    test_loss, test_accuracy, test_ad_recall, _ = evaluate_model(
         model, test_loader, loss_function, device
     )
     print(
         f"Test results | "
         f"loss: {test_loss:.4f} | "
         f"accuracy: {test_accuracy:.2%} | "
-        f"AD recall: {test_ad_recall:.2%} | "
-        f"AD false-negative rate: {test_false_negative_rate:.2%}"
+        f"AD recall: {test_ad_recall:.2%}"
     )
 
     plot_directory = Path("./plots")
