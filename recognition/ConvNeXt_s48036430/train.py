@@ -11,6 +11,9 @@ from modules import ConvNeXtClassifier
 
 EPOCHS = 300
 LEARNING_RATE = 1e-4
+MIN_LEARNING_RATE = 1e-6
+WARMUP_EPOCHS = 20
+WEIGHT_DECAY = 0.05
 LABEL_SMOOTHING = 0.1
 MIXUP_ALPHA = 0.8
 CUTMIX_ALPHA = 1.0
@@ -149,7 +152,20 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ConvNeXtClassifier().to(device)
     loss_function = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+    )
+
+    def learning_rate_scale(epoch):
+        if epoch < WARMUP_EPOCHS:
+            return (epoch + 1) / WARMUP_EPOCHS
+        progress = (epoch - WARMUP_EPOCHS) / (EPOCHS - WARMUP_EPOCHS)
+        minimum_scale = MIN_LEARNING_RATE / LEARNING_RATE
+        return minimum_scale + (1.0 - minimum_scale) * 0.5 * (
+            1.0 + torch.cos(torch.tensor(torch.pi * progress)).item()
+        )
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, learning_rate_scale)
 
     print(
         f"Training on {device}: {len(train_loader.dataset)} training images, "
@@ -172,6 +188,7 @@ def main():
     loss_axis, accuracy_axis, recall_axis, false_negative_axis = axes.flat
 
     for epoch in range(1, EPOCHS + 1):
+        current_learning_rate = optimizer.param_groups[0]["lr"]
         epoch_loss, epoch_accuracy = train_model(model, train_loader, optimizer, device)
         (
             validation_loss,
@@ -243,8 +260,10 @@ def main():
             f"validation loss: {validation_loss:.4f} | "
             f"validation accuracy: {validation_accuracy:.2%} | "
             f"AD recall: {ad_recall:.2%} | "
-            f"AD false-negative rate: {false_negative_rate:.2%}"
+            f"AD false-negative rate: {false_negative_rate:.2%} | "
+            f"learning rate: {current_learning_rate:.2e}"
         )
+        scheduler.step()
 
     plot_directory = Path("./plots")
     plot_directory.mkdir(parents=True, exist_ok=True)
