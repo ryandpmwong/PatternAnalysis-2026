@@ -52,7 +52,7 @@ def load_dataset(split, batch_size=BATCH_SIZE, data_dir=DATA_DIR):
 
 def load_train_validation(
     batch_size=BATCH_SIZE,
-    validation_fraction=0.2,
+    validation_fraction=0.1,
     data_dir=DATA_DIR,
     seed=42,
 ):
