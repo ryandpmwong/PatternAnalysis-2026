@@ -16,9 +16,6 @@ MIN_LEARNING_RATE = 1e-6
 WARMUP_EPOCHS = 20
 WEIGHT_DECAY = 0.05
 LABEL_SMOOTHING = 0.1
-MIXUP_ALPHA = 0.8
-CUTMIX_ALPHA = 1.0
-
 TRAIN_AUGMENTATION = transforms.Compose(
     [
         transforms.ConvertImageDtype(torch.uint8),
@@ -27,63 +24,6 @@ TRAIN_AUGMENTATION = transforms.Compose(
         transforms.RandomErasing(p=0.25),
     ]
 )
-
-
-def mix_batch(images, labels, num_classes):
-    smoothed_targets = torch.full(
-        (labels.size(0), num_classes),
-        LABEL_SMOOTHING / num_classes,
-        device=images.device,
-    )
-    smoothed_targets.scatter_(
-        1,
-        labels.unsqueeze(1),
-        1.0 - LABEL_SMOOTHING + LABEL_SMOOTHING / num_classes,
-    )
-
-    if labels.size(0) < 2:
-        return images, smoothed_targets
-
-    permutation = torch.randperm(labels.size(0), device=images.device)
-    use_cutmix = torch.rand(()) < 0.5
-    if use_cutmix:
-        mixing_lambda = (
-            torch.distributions.Beta(CUTMIX_ALPHA, CUTMIX_ALPHA).sample().item()
-        )
-        height, width = images.shape[-2:]
-        cut_ratio = (1.0 - mixing_lambda) ** 0.5
-        cut_height = int(height * cut_ratio)
-        cut_width = int(width * cut_ratio)
-        center_y = torch.randint(height, ()).item()
-        center_x = torch.randint(width, ()).item()
-        top = max(center_y - cut_height // 2, 0)
-        bottom = min(center_y + cut_height // 2, height)
-        left = max(center_x - cut_width // 2, 0)
-        right = min(center_x + cut_width // 2, width)
-
-        mixed_images = images.clone()
-        mixed_images[:, :, top:bottom, left:right] = images[
-            permutation, :, top:bottom, left:right
-        ]
-        replaced_area = (bottom - top) * (right - left)
-        mixing_lambda = 1.0 - replaced_area / (height * width)
-    else:
-        mixing_lambda = (
-            torch.distributions.Beta(MIXUP_ALPHA, MIXUP_ALPHA).sample().item()
-        )
-        mixed_images = (
-            mixing_lambda * images + (1.0 - mixing_lambda) * images[permutation]
-        )
-
-    mixed_targets = (
-        mixing_lambda * smoothed_targets
-        + (1.0 - mixing_lambda) * smoothed_targets[permutation]
-    )
-    return mixed_images, mixed_targets
-
-
-def soft_target_cross_entropy(logits, targets):
-    return -(targets * nn.functional.log_softmax(logits, dim=1)).sum(dim=1).mean()
 
 
 def train_model(model, train_loader, optimizer, device):
@@ -96,11 +36,12 @@ def train_model(model, train_loader, optimizer, device):
         images = torch.stack([TRAIN_AUGMENTATION(image) for image in images])
         images = images.to(device)
         labels = labels.to(device)
-        mixed_images, mixed_targets = mix_batch(images, labels, model.head.out_features)
 
         optimizer.zero_grad()
-        logits = model(mixed_images)
-        loss = soft_target_cross_entropy(logits, mixed_targets)
+        logits = model(images)
+        loss = nn.functional.cross_entropy(
+            logits, labels, label_smoothing=LABEL_SMOOTHING
+        )
         loss.backward()
         optimizer.step()
 
