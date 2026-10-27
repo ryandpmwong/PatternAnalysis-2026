@@ -10,6 +10,7 @@ from modules import ConvNeXtClassifier
 
 MODEL_PATH = Path("./models/convnext_best.pth")
 PLOT_PATH = Path("./plots/test_metrics_vs_threshold.png")
+EXAMPLE_PLOT_PATH = Path("./plots/example_classifications.png")
 
 
 def report_model_size_and_latency(model, data_loader, device):
@@ -190,6 +191,81 @@ def plot_test_metrics_by_threshold(ad_probabilities, labels, plot_path):
     plt.close(figure)
 
 
+def plot_example_classifications(model, data_loader, device, plot_path):
+    row_labels = (CLASS_TO_LABEL["AD"], CLASS_TO_LABEL["NC"])
+    column_titles = (
+        "AD probability 0.0 - 0.1",
+        "AD probability 0.4 - 0.5",
+        "AD probability 0.5 - 0.6",
+        "AD probability 0.9 - 1.0",
+    )
+    examples = [[None for _ in column_titles] for _ in row_labels]
+
+    model.eval()
+    with torch.no_grad():
+        for images, labels in data_loader:
+            probabilities = torch.softmax(model(images.to(device)), dim=1)[
+                :, CLASS_TO_LABEL["AD"]
+            ].cpu()
+
+            for image, label, probability in zip(images, labels, probabilities):
+                if label.item() == CLASS_TO_LABEL["AD"]:
+                    row_index = 0
+                elif label.item() == CLASS_TO_LABEL["NC"]:
+                    row_index = 1
+                else:
+                    continue
+
+                probability_value = probability.item()
+                if probability_value < 0.1:
+                    column_index = 0
+                elif 0.4 <= probability_value < 0.5:
+                    column_index = 1
+                elif 0.5 < probability_value <= 0.6:
+                    column_index = 2
+                elif probability_value > 0.9:
+                    column_index = 3
+                else:
+                    continue
+
+                if examples[row_index][column_index] is None:
+                    examples[row_index][column_index] = (
+                        image.squeeze(0).cpu(),
+                        probability_value,
+                    )
+
+            if all(example is not None for row in examples for example in row):
+                break
+
+    figure, axes = plt.subplots(2, 4, figsize=(16, 7))
+    for row_index, (true_label, axes_row) in enumerate(zip(row_labels, axes)):
+        for column_index, axis in enumerate(axes_row):
+            example = examples[row_index][column_index]
+            axis.set_title(column_titles[column_index])
+            axis.set_xticks([])
+            axis.set_yticks([])
+            if column_index == 0:
+                label_name = "AD" if true_label == CLASS_TO_LABEL["AD"] else "NC"
+                axis.set_ylabel(f"True {label_name}")
+
+            if example is None:
+                axis.text(0.5, 0.5, "No matching example", ha="center", va="center")
+                continue
+
+            image, probability = example
+            axis.imshow(
+                torch.rot90(image, k=1, dims=(0, 1)), cmap="gray", vmin=0, vmax=1
+            )
+            axis.set_xlabel(f"AD probability: {probability:.3f}")
+
+    figure.tight_layout()
+    plot_path = Path(plot_path)
+    plot_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plt.close(figure)
+    print(f"Saved example classifications plot to {plot_path}")
+
+
 def evaluate_and_plot_test_results(
     model, validation_loader, test_loader, device, loss_function, plot_path
 ):
@@ -257,6 +333,7 @@ def main():
         loss_function,
         PLOT_PATH,
     )
+    plot_example_classifications(model, test_loader, device, EXAMPLE_PLOT_PATH)
 
 
 if __name__ == "__main__":
