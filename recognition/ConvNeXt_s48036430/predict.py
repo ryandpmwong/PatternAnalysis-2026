@@ -10,6 +10,7 @@ from modules import ConvNeXtClassifier
 
 MODEL_PATH = Path("./models/convnext_best.pth")
 PLOT_PATH = Path("./plots/test_metrics_vs_threshold.png")
+IGNORED_INTERVAL_PLOT_PATH = Path("./plots/test_accuracy_by_ignored_interval.png")
 EXAMPLE_PLOT_PATH = Path("./plots/example_classifications.png")
 
 
@@ -191,6 +192,54 @@ def plot_test_metrics_by_threshold(ad_probabilities, labels, plot_path):
     plt.close(figure)
 
 
+def plot_test_accuracy_by_ignored_interval(ad_probabilities, labels, plot_path):
+    interval_widths = torch.linspace(0, 1, 101)
+    accuracies = []
+    percentages_remaining = []
+    predictions = torch.where(
+        ad_probabilities >= 0.5,
+        CLASS_TO_LABEL["AD"],
+        CLASS_TO_LABEL["NC"],
+    )
+
+    for width in interval_widths:
+        lower_bound = (1 - width.item()) / 2
+        upper_bound = (1 + width.item()) / 2
+        remaining = (ad_probabilities < lower_bound) | (ad_probabilities > upper_bound)
+
+        remaining_count = remaining.sum().item()
+        percentages_remaining.append(remaining_count / len(labels))
+        if remaining_count:
+            accuracies.append(
+                (predictions[remaining] == labels[remaining]).float().mean().item()
+            )
+        else:
+            accuracies.append(float("nan"))
+
+    figure, axis = plt.subplots(figsize=(8, 5))
+    axis.plot(interval_widths.tolist(), accuracies, label="Test accuracy")
+    axis.plot(
+        interval_widths.tolist(),
+        percentages_remaining,
+        label="Percentage remaining",
+    )
+    axis.set(
+        title="Test Accuracy When Ignoring Central Predictions",
+        xlabel="Ignored interval width",
+        ylabel="Proportion",
+        xlim=(0, 1),
+        ylim=(0, 1),
+    )
+    axis.set_xticks([index / 10 for index in range(11)])
+    axis.grid(True, alpha=0.3)
+    axis.legend()
+    plot_path = Path(plot_path)
+    plot_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plt.close(figure)
+    print(f"Saved ignored-interval test plot to {plot_path}")
+
+
 def plot_example_classifications(model, data_loader, device, plot_path):
     row_labels = (CLASS_TO_LABEL["AD"], CLASS_TO_LABEL["NC"])
     column_titles = (
@@ -267,7 +316,13 @@ def plot_example_classifications(model, data_loader, device, plot_path):
 
 
 def evaluate_and_plot_test_results(
-    model, validation_loader, test_loader, device, loss_function, plot_path
+    model,
+    validation_loader,
+    test_loader,
+    device,
+    loss_function,
+    plot_path,
+    ignored_interval_plot_path,
 ):
     validation_probabilities, validation_labels, validation_loss = (
         collect_ad_probabilities(
@@ -309,6 +364,11 @@ def evaluate_and_plot_test_results(
     plot_path.parent.mkdir(parents=True, exist_ok=True)
     plot_test_metrics_by_threshold(test_probabilities, test_labels, plot_path)
     print(f"Saved test threshold metrics plot to {plot_path}")
+    plot_test_accuracy_by_ignored_interval(
+        test_probabilities,
+        test_labels,
+        ignored_interval_plot_path,
+    )
 
 
 def main():
@@ -332,6 +392,7 @@ def main():
         device,
         loss_function,
         PLOT_PATH,
+        IGNORED_INTERVAL_PLOT_PATH,
     )
     plot_example_classifications(model, test_loader, device, EXAMPLE_PLOT_PATH)
 
