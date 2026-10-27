@@ -77,6 +77,69 @@ def calculate_metrics(ad_probabilities, labels, threshold):
     return accuracy, ad_recall
 
 
+def calculate_binary_auroc(scores, positive_labels):
+    positive_count = positive_labels.sum().item()
+    negative_count = (~positive_labels).sum().item()
+    if not positive_count or not negative_count:
+        return float("nan")
+
+    sorted_scores, sort_indices = torch.sort(scores)
+    sorted_labels = positive_labels[sort_indices]
+    _, tie_group_indices, tie_group_counts = torch.unique_consecutive(
+        sorted_scores, return_inverse=True, return_counts=True
+    )
+    rank_ends = tie_group_counts.cumsum(0).to(torch.float64)
+    rank_starts = rank_ends - tie_group_counts.to(torch.float64) + 1
+    average_ranks = (rank_starts + rank_ends) / 2
+    positive_rank_sum = average_ranks[tie_group_indices][sorted_labels].sum().item()
+    return (positive_rank_sum - positive_count * (positive_count + 1) / 2) / (
+        positive_count * negative_count
+    )
+
+
+def report_classification_metrics(ad_probabilities, labels):
+    predictions = torch.where(
+        ad_probabilities >= 0.5,
+        CLASS_TO_LABEL["AD"],
+        CLASS_TO_LABEL["NC"],
+    )
+    class_metrics = []
+
+    print("Test classification metrics (threshold=0.5):")
+    print(f"{'Class':<8} {'Precision':>10} {'Recall':>10} {'F1':>10} {'AUROC':>10}")
+    for class_name in ("AD", "NC"):
+        class_label = CLASS_TO_LABEL[class_name]
+        true_positive_mask = labels == class_label
+        predicted_positive_mask = predictions == class_label
+        true_positive = (true_positive_mask & predicted_positive_mask).sum().item()
+        false_positive = (~true_positive_mask & predicted_positive_mask).sum().item()
+        false_negative = (true_positive_mask & ~predicted_positive_mask).sum().item()
+
+        precision = (
+            true_positive / (true_positive + false_positive)
+            if true_positive + false_positive
+            else 0.0
+        )
+        recall = (
+            true_positive / (true_positive + false_negative)
+            if true_positive + false_negative
+            else 0.0
+        )
+        f1 = (
+            2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        )
+        class_scores = ad_probabilities if class_name == "AD" else 1 - ad_probabilities
+        auroc = calculate_binary_auroc(class_scores, true_positive_mask)
+        class_metrics.append((precision, recall, f1, auroc))
+        print(
+            f"{class_name:<8} {precision:>10.4f} {recall:>10.4f} "
+            f"{f1:>10.4f} {auroc:>10.4f}"
+        )
+
+    macro_f1 = sum(metrics[2] for metrics in class_metrics) / len(class_metrics)
+    print(f"Macro-F1: {macro_f1:.4f}")
+
+
 def plot_test_metrics_by_threshold(ad_probabilities, labels, plot_path):
     thresholds = torch.arange(1, 100, dtype=torch.float32) / 100
     metrics = [
@@ -102,7 +165,7 @@ def plot_test_metrics_by_threshold(ad_probabilities, labels, plot_path):
     plt.close(figure)
 
 
-def generate_threshold_plot(
+def evaluate_and_plot_test_results(
     model, validation_loader, test_loader, device, loss_function, plot_path
 ):
     validation_probabilities, validation_labels, validation_loss = (
@@ -126,6 +189,7 @@ def generate_threshold_plot(
     test_probabilities, test_labels, test_loss = collect_ad_probabilities(
         model, test_loader, device, loss_function=loss_function
     )
+    report_classification_metrics(test_probabilities, test_labels)
     for name, test_threshold in (
         ("validation-tuned", threshold),
         ("default threshold 0.5", 0.5),
@@ -159,7 +223,7 @@ def main():
     loss_function = torch.nn.CrossEntropyLoss()
 
     print(f"Loaded model checkpoint from {MODEL_PATH} on {device}.")
-    generate_threshold_plot(
+    evaluate_and_plot_test_results(
         model,
         validation_loader,
         test_loader,
