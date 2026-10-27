@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 
 import torch
 import torch.nn.functional as F
@@ -9,6 +10,30 @@ from modules import ConvNeXtClassifier
 
 MODEL_PATH = Path("./models/convnext_best.pth")
 PLOT_PATH = Path("./plots/test_metrics_vs_threshold.png")
+
+
+def report_model_size_and_latency(model, data_loader, device):
+    parameter_count = sum(parameter.numel() for parameter in model.parameters())
+    sample_images, _ = next(iter(data_loader))
+    sample_image = sample_images[:1].to(device)
+
+    model.eval()
+    with torch.inference_mode():
+        for _ in range(5):
+            model(sample_image)
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+
+        start_time = time.perf_counter()
+        for _ in range(20):
+            model(sample_image)
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+        elapsed_time = time.perf_counter() - start_time
+
+    latency_ms = elapsed_time * 1000 / 20
+    print(f"Model parameters: {parameter_count:,}")
+    print(f"Inference latency: {latency_ms:.2f} ms/image on {device}")
 
 
 def collect_ad_probabilities(model, data_loader, device, loss_function=None):
@@ -223,6 +248,7 @@ def main():
     loss_function = torch.nn.CrossEntropyLoss()
 
     print(f"Loaded model checkpoint from {MODEL_PATH} on {device}.")
+    report_model_size_and_latency(model, test_loader, device)
     evaluate_and_plot_test_results(
         model,
         validation_loader,
