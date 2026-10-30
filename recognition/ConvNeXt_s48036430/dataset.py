@@ -1,3 +1,5 @@
+"""Utilities for loading brain-slice image datasets."""
+
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +15,8 @@ CLASS_TO_LABEL = {"AD": 0, "NC": 1}
 
 
 class BrainSliceDataset(Dataset):
+    """Index, load, and normalize labeled brain-slice images."""
+
     def __init__(
         self, split, image_size=(IMAGE_WIDTH, IMAGE_HEIGHT), data_dir=DATA_DIR
     ):
@@ -41,6 +45,7 @@ class BrainSliceDataset(Dataset):
 
 
 def load_dataset(split, batch_size=BATCH_SIZE, data_dir=DATA_DIR):
+    """Create a data loader for the requested dataset split."""
     if split not in ("train", "test"):
         raise ValueError("split must be 'train' or 'test'")
 
@@ -56,6 +61,7 @@ def load_train_validation(
     data_dir=DATA_DIR,
     seed=42,
 ):
+    """Split training data by subject into training and validation loaders."""
     if not 0.0 < validation_fraction < 1.0:
         raise ValueError("validation_fraction must be between 0 and 1")
 

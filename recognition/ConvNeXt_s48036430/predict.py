@@ -1,3 +1,5 @@
+"""Evaluate a trained ConvNeXt model and generate test-result plots."""
+
 from pathlib import Path
 import time
 
@@ -15,6 +17,7 @@ EXAMPLE_PLOT_PATH = Path("./plots/example_classifications.png")
 
 
 def report_model_size_and_latency(model, data_loader, device):
+    """Print the model parameter count and average inference latency."""
     parameter_count = sum(parameter.numel() for parameter in model.parameters())
     sample_images, _ = next(iter(data_loader))
     sample_image = sample_images[:1].to(device)
@@ -39,6 +42,7 @@ def report_model_size_and_latency(model, data_loader, device):
 
 
 def collect_ad_probabilities(model, data_loader, device, loss_function=None):
+    """Collect AD probabilities, labels, and optional average loss."""
     model.eval()
     probabilities = []
     labels = []
@@ -65,6 +69,7 @@ def collect_ad_probabilities(model, data_loader, device, loss_function=None):
 
 
 def find_best_ad_threshold(ad_probabilities, labels):
+    """Select the AD probability threshold with the highest accuracy."""
     unique_probabilities = torch.unique(ad_probabilities, sorted=True)
     candidates = [0.0, 0.5, 1.0]
     candidates.extend(
@@ -91,6 +96,7 @@ def find_best_ad_threshold(ad_probabilities, labels):
 
 
 def calculate_metrics(ad_probabilities, labels, threshold):
+    """Calculate classification accuracy and AD recall at a threshold."""
     predictions = torch.where(
         ad_probabilities >= threshold,
         CLASS_TO_LABEL["AD"],
@@ -105,6 +111,7 @@ def calculate_metrics(ad_probabilities, labels, threshold):
 
 
 def calculate_binary_auroc(scores, positive_labels):
+    """Calculate AUROC for binary labels, accounting for tied scores."""
     positive_count = positive_labels.sum().item()
     negative_count = (~positive_labels).sum().item()
     if not positive_count or not negative_count:
@@ -125,6 +132,7 @@ def calculate_binary_auroc(scores, positive_labels):
 
 
 def report_classification_metrics(ad_probabilities, labels):
+    """Print per-class precision, recall, F1, and AUROC metrics."""
     predictions = torch.where(
         ad_probabilities >= 0.5,
         CLASS_TO_LABEL["AD"],
@@ -168,6 +176,7 @@ def report_classification_metrics(ad_probabilities, labels):
 
 
 def plot_test_metrics_by_threshold(ad_probabilities, labels, plot_path):
+    """Plot test accuracy and AD recall across probability thresholds."""
     thresholds = torch.arange(1, 100, dtype=torch.float32) / 100
     metrics = [
         calculate_metrics(ad_probabilities, labels, threshold.item())
@@ -193,6 +202,7 @@ def plot_test_metrics_by_threshold(ad_probabilities, labels, plot_path):
 
 
 def plot_test_accuracy_by_ignored_interval(ad_probabilities, labels, plot_path):
+    """Plot accuracy and coverage as central predictions are ignored."""
     interval_widths = torch.linspace(0, 1, 101)
     accuracies = []
     percentages_remaining = []
@@ -241,6 +251,7 @@ def plot_test_accuracy_by_ignored_interval(ad_probabilities, labels, plot_path):
 
 
 def plot_example_classifications(model, data_loader, device, plot_path):
+    """Plot example images grouped by true class and AD probability."""
     row_labels = (CLASS_TO_LABEL["AD"], CLASS_TO_LABEL["NC"])
     column_titles = (
         "AD probability 0.0 - 0.1",
@@ -324,6 +335,7 @@ def evaluate_and_plot_test_results(
     plot_path,
     ignored_interval_plot_path,
 ):
+    """Evaluate validation and test data and save test-result plots."""
     validation_probabilities, validation_labels, validation_loss = (
         collect_ad_probabilities(
             model, validation_loader, device, loss_function=loss_function
@@ -372,6 +384,7 @@ def evaluate_and_plot_test_results(
 
 
 def main():
+    """Load the trained model, evaluate it, and generate result plots."""
     if not MODEL_PATH.is_file():
         raise FileNotFoundError(f"Trained model checkpoint not found: {MODEL_PATH}")
 

@@ -1,3 +1,5 @@
+"""Train and evaluate a ConvNeXt brain-slice classifier."""
+
 from collections import Counter
 from pathlib import Path
 from time import perf_counter
@@ -27,6 +29,7 @@ TRAIN_AUGMENTATION = transforms.Compose(
 
 
 def train_model(model, train_loader, optimizer, device):
+    """Train the model for one epoch and return loss and accuracy."""
     model.train()
     total_loss = 0.0
     correct = 0
@@ -54,6 +57,7 @@ def train_model(model, train_loader, optimizer, device):
 
 
 def evaluate_model(model, validation_loader, loss_function, device):
+    """Evaluate a model and return loss, accuracy, AD recall, and miss rate."""
     model.eval()
     total_loss = 0.0
     correct = 0
@@ -82,6 +86,7 @@ def evaluate_model(model, validation_loader, loss_function, device):
 
 
 def print_class_counts(name, data_loader):
+    """Print the class distribution of a dataset subset."""
     subset = data_loader.dataset
     label_counts = Counter(subset.dataset.samples[index][1] for index in subset.indices)
     class_counts = ", ".join(
@@ -92,6 +97,7 @@ def print_class_counts(name, data_loader):
 
 
 def main():
+    """Train the classifier, evaluate its best checkpoint, and plot metrics."""
     train_loader, validation_loader = load_train_validation(batch_size=BATCH_SIZE)
     test_loader = load_dataset("test", batch_size=BATCH_SIZE)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -102,6 +108,7 @@ def main():
     )
 
     def learning_rate_scale(epoch):
+        """Return the warmup and cosine-decay scale for an epoch."""
         if epoch < WARMUP_EPOCHS:
             return (epoch + 1) / WARMUP_EPOCHS
         progress = (epoch - WARMUP_EPOCHS) / (EPOCHS - WARMUP_EPOCHS)
